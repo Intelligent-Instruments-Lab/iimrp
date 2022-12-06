@@ -183,6 +183,7 @@ MRP {
 	allNotesOff {
 		notes.do({arg note; note.status = \note_off});
 		osc.sendMsg("/mrp/ui/allnotesoff");
+		osc.sendMsg("/mrp/allnotesoff"); //this is the message actually used in the python library
 	}
 
 	simulator_ {arg boolean; if( boolean==true, { this.startMRPSimulator }, { this.stopMRPSimulator }) }
@@ -237,25 +238,33 @@ a.set(\intensity, 0.7)
 			}, {
 				notes[msg[2]].simsynth.release;
 			});
-		}, '/mrp/midi', osc);
+		}, '/mrp/midi');
 
 		OSCdef(\brightness, {|msg, time, addr, recvPort|
 			msg.postln;
 			"brightness in simulation mode".postln;
 			notes[msg[2]].simsynth.set(\brightness, msg[3]);
-		}, '/mrp/quality/brightness', osc); // def style
+		}, '/mrp/quality/brightness'); // def style
 
 		OSCdef(\harmonic, {|msg, time, addr, recvPort|
 			msg.postln;
 			"harmonic in simulation mode".postln;
 			notes[msg[2]].simsynth.set(\harmonic, msg[3]);
-		}, '/mrp/quality/harmonic', osc); // def style
+		}, '/mrp/quality/harmonic'); // def style
 
 		OSCdef(\intensity, {|msg, time, addr, recvPort|
 			msg.postln;
 			"intensity in simulation mode".postln;
 			notes[msg[2]].simsynth.set(\intensity, msg[3]);
-		}, '/mrp/quality/intensity', osc); // def style
+		}, '/mrp/quality/intensity'); // def style
+
+		OSCdef(\allnotesoff, {|msg, time, addr, recvPort|
+			msg.postln;
+			"all notes off".postln;
+			notes.do({arg note, i;
+				notes[i].simsynth.release;
+			});
+		}, '/mrp/allnotesoff');
 
 	}
 
@@ -276,7 +285,8 @@ a.set(\intensity, 0.7)
 
 		win = Window.new("- MRP GUI -", Rect(100, 500, bounds.width+20, bounds.height+10), resizable:false).front;
 		win.alwaysOnTop = true;
-		midikeyboardview = MIDIKeyboard.new(win, Rect(10, 70, 990, 160), 5, 36)
+		// Michael: MIDIKeyboard -> MRPMIDIKeyboard
+		midikeyboardview = MRPMIDIKeyboard.new(win, Rect(10, 70, 990, 160), 5, 36)
 				.keyDownAction_({arg key;
 			        this.noteOn(key, 60);
 	                "Note ON :".post; key.postln;
