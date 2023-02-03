@@ -50,17 +50,17 @@ def main(host="127.0.0.1", receive_port=8888, send_port=7770):
                     'intensity': 1.0,
                     'harmonics_raw': [1.2, 0.3, 0.4]
                 })
-            else if test == 'voices':
+            elif test == 'voices':
                 mrp.note_on(note+count)
                 print(len(mrp.voices), 'voices:', mrp.voices)
-            else if test == 'qualities':
+            elif test == 'qualities':
                 mrp.note_on(note)
                 mrp.quality_update(qualities[0], count/10)
             note_on = True
         else:
             if test == 'code':
                 mrp.note_off(note)
-            else if test == 'voices':
+            elif test == 'voices':
                 if count % 2:
                     mrp.note_off(note+int(count/2))
             note_on = False
