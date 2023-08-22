@@ -34,7 +34,10 @@ def main(midi_in='To iipyper 1', osc_host='127.0.0.1', osc_port=9999, mrp_send_p
     def _(msg):
         notes_on.add(msg.note)
         print(f"notes_on: {notes_on}. new note_on: {msg}")
-        mrp.note_on(msg.note, msg.velocity)
+        mrp.note_on(msg.note)
+        # Basic velocity mapping:
+        mrp.quality_update(msg.note, 'brightness', msg.velocity/127)
+        mrp.quality_update(msg.note, 'intensity', msg.velocity/127)
 
     @midi.handle(type='note_off', note=range(1,128), channel=0)
     def _(msg):
