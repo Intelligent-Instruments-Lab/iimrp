@@ -8,11 +8,81 @@ HEAT_DISSIPATION = HEAT_INCREASE/2  # Heat dissipation per unit time
 OVERHEATING_RISK = 90 # Estimated high risk of overheating
 COOLING_PERIOD = 90 # Time for a note to cool down after being turned off
 
-class MRPNoteHeatMonitor:
+class MRPHeatMonitor:
     """
-    A class to estimate the thermal state of an MRP note.
     This is an 'unverified' prototype of a 'heat monitor' for the MRP.
     It is simulation-based, i.e. it does not use any real temperature data.
+    It works by simulating the heat score of a note based on the harmonics being played.
+    The heat score increases when the note is played and decreases when the note is not played.
+    A note is then decided to be either eligible or ineligible to be played based on its heat score.
+    """
+    def __init__(self, mrp, **kwargs) -> None:
+        self.mrp = mrp
+        self.settings = self.mrp.settings
+        self.notes = [MRPNoteHeatMonitor(n) for n in range(self.settings['range']['start'], self.settings['range']['end']+1)]
+
+    def heat_monitor_on(self):
+        self.settings['heat_monitor'] = True
+        if self.heat_monitor is None:
+            self.init_heat_monitor()
+    
+    def heat_monitor_off(self):
+        self.settings['heat_monitor'] = False
+        self.heat_monitor = None
+    
+    def heat_monitor_toggle(self):
+        self.settings['heat_monitor'] = not self.settings['heat_monitor']
+        if self.settings['heat_monitor'] is False:
+            self.heat_monitor_off()
+        else:
+            self.heat_monitor_on()
+    
+    def heat_monitor_reset(self):
+        self.init_heat_monitor()
+
+    def monitor_heat(self):
+        if self.settings['heat_monitor'] is False: return
+        notes_status = self.mrp.get_notes_status()
+        notes_harmonics = self.mrp.get_notes_harmonics()
+        pretty_print_status = []
+        for note, on in notes_status.items():
+            heat = self.notes[note - self.settings['range']['start']]
+            _harmonics = notes_harmonics[note]
+            heat_prev = heat.heat_score
+            if on:
+                heat.update_heat_score_on(_harmonics)
+            else:
+                heat.update_heat_score_off()
+            heat_diff = heat.heat_score - heat_prev
+            heat.check_eligibility()
+            pretty_print_status.append((note, on, heat, heat.is_eligible))
+        self.pretty_print_heat_monitor(pretty_print_status)
+
+    def pretty_print_heat_monitor(self, pretty_print_status):
+        p_eligible = []
+        p_heat = []
+        p_on = []
+        p_note = []
+        for s in pretty_print_status:
+            h = round(s[2].heat_score)
+            h = f"  {h}" if h < 10 else f" {h}"
+            e = " ✅" if s[3] else " ❌"
+            o = " 🟩" if s[1] else " 🟥"
+            n = f" {s[0]}" if s[0] < 100 else f"{s[0]}"
+            p_eligible.append(e)
+            p_heat.append(h)
+            p_on.append(o)
+            p_note.append(n)
+        print(f"{''.join(p_eligible)}")
+        print(f"{''.join(p_heat)}")
+        print(f"{''.join(p_on)}")
+        print(f"{''.join(p_note)}")
+        print("_"*(1+len(''.join(p_heat))))
+        print('===')
+
+class MRPNoteHeatMonitor:
+    """
+    A class to estimate the thermal state of an individual MRP note.
 
     Attributes
     ----------

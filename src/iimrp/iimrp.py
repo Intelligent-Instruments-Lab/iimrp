@@ -22,6 +22,8 @@ TODO:
 import numpy as np
 import copy
 
+from .thermal import *
+
 NOTE_ON = True
 NOTE_OFF = False
 
@@ -29,12 +31,7 @@ def clamp(n, smallest, largest):
     return max(smallest, min(n, largest))
 
 class MRP(object):
-
-    def print(self, *a, **kw):
-        if self.verbose:
-            print(*a, **kw)
-    
-    def __init__(self, _osc, settings=None, verbose=True):
+    def __init__(self, osc, settings=None, verbose=True):
         # default settings
         self.verbose = verbose
         self.settings = {
@@ -49,7 +46,8 @@ class MRP(object):
             'channel': 15, # real-time midi note ch (0-indexed)
             'range': { 'start': 21, 'end': 108 }, # MIDI for piano keys 0-88
             'qualities_max': 1.0,
-            'qualities_min': 0.0
+            'qualities_min': 0.0,
+            'heat_monitor': False
         }
         self.note_on_hex = 0x9F
         self.note_off_hex = 0x8F
@@ -60,8 +58,10 @@ class MRP(object):
         self.print('MRP starting with settings:', self.settings)
 
         # OSC reference and paths
-        self.osc = _osc
-        assert self.osc.get_client_by_name("mrp") is not None, f"OSC client 'mrp' not found in: {_osc.client_names}"
+        self.osc = osc
+        if self.osc.get_client_by_name("mrp") is None:
+            self.print(f"MRP OSC client not found, creating one at {self.settings['address']['ip']}:{self.settings['address']['port']}")
+            self.osc.host.create_client("mrp", self.settings['address']['ip'], self.settings['address']['port'])
         self.osc_paths = {
             'midi': '/mrp/midi',
             'qualities': {
@@ -117,6 +117,8 @@ class MRP(object):
         self.program = 0 # current program (see MRP XML)
         # init sequence
         self.init_notes()
+        if self.settings['heat_monitor'] is True:
+            self.heat_monitor = MRPHeatMonitor(self)
 
     def init_notes(self):
         """
@@ -133,7 +135,7 @@ class MRP(object):
             )
             self.notes.append(note)
         self.print(len(self.notes), 'notes created.')
- 
+
     """
     /mrp/midi
     """
@@ -553,3 +555,7 @@ class MRP(object):
     def cleanup(self):
         print('MRP exiting...')
         self.all_notes_off()
+
+    def print(self, *a, **kw):
+        """verbose debug printing"""
+        if self.verbose: print(*a, **kw)
