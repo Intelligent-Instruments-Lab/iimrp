@@ -1,4 +1,5 @@
 import time
+from typing import Any
 import numpy as np
 
 # Heat Management Constants
@@ -79,6 +80,9 @@ class MRPHeatMonitor:
         print(f"{''.join(p_note)}")
         print("_"*(1+len(''.join(p_heat))))
         print('===')
+
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        self.monitor_heat()
 
 class MRPNoteHeatMonitor:
     """
