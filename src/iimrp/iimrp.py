@@ -390,6 +390,66 @@ class MRP(object):
             print('quality_update(): "qualities" is not an object:', note, qualities)
             return None
 
+    def get_note_quality(self, note:int, quality:str) -> float:
+        """
+        Return the value of a note's quality.
+
+        Example
+            get_note_quality(48, 'brightness')
+        
+        Args
+            note (int): MIDI note number
+            quality (string): name of quality to get, must be same as key in osc_paths
+
+        Returns
+            float: value of quality
+        """
+        return self.notes[self.note_index(note)]['qualities'][quality]
+
+    def get_note_qualities(self, note:int) -> dict:
+        """
+        Return the values of a note's qualities.
+
+        Example
+            get_note_qualities(48)
+        
+        Args
+            note (int): MIDI note number
+
+        Returns
+            dict: dict of qualities in key (string):value (float) pairs
+        """
+        return self.notes[self.note_index(note)]['qualities']
+    
+    def get_quality(self, quality:str) -> dict:
+        """
+        Return values of a quality for all active notes.
+
+        Example
+            get_quality('brightness')
+        
+        Args
+            quality (string): name of quality to get, must be same as key in osc_paths
+
+        Returns
+            dict: note:quality in key (int):value (float) pairs
+        """
+        active_notes = self.note_on_numbers()
+        return {n:self.get_note_quality(n, quality) for n in active_notes}
+    
+    def get_qualities(self) -> dict:
+        """
+        Return values of all qualities for all active notes.
+
+        Example
+            get_qualities()
+        
+        Returns
+            dict: note:qualities in key (int):value (dict) pairs
+        """
+        active_notes = self.note_on_numbers()
+        return {n:self.get_note_qualities(n) for n in active_notes}
+
     """
     /mrp/pedal
     """
@@ -502,11 +562,7 @@ class MRP(object):
                 return False
         else:
             self.print('note_on_is_valid(): note', note, 'out of range')
-            return False
-            
-
-    def note_msg_is_valid(self, note):
-        return self.note_off_is_valid(note)
+            return False    
 
     def note_off_is_valid(self, note):
         """
@@ -521,6 +577,10 @@ class MRP(object):
         else:
             self.print('note_off_is_valid(): note', note, 'is already off')
             return False
+
+    def note_msg_is_valid(self, note):
+        print(f"note_msg_is_valid(): note {note}")
+        return self.note_off_is_valid(note)
 
     """
     qualities methods
