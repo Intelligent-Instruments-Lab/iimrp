@@ -61,7 +61,7 @@ class MRP(object):
         self.osc = osc
         if self.osc.get_client_by_name("mrp") is None:
             self.print(f"MRP OSC client not found, creating one at {self.settings['address']['ip']}:{self.settings['address']['port']}")
-            self.osc.host.create_client("mrp", self.settings['address']['ip'], self.settings['address']['port'])
+            self.osc.create_client("mrp", self.settings['address']['ip'], self.settings['address']['port'])
         self.osc_paths = {
             'midi': '/mrp/midi',
             'qualities': {
@@ -119,6 +119,10 @@ class MRP(object):
         self.init_notes()
         if self.settings['heat_monitor'] is True:
             self.heat_monitor = MRPHeatMonitor(self)
+
+    def monitor(self):
+        if self.settings['heat_monitor'] is True:
+            self.heat_monitor()
 
     def init_notes(self):
         """
@@ -234,9 +238,9 @@ class MRP(object):
     """
     /mrp/qualities
     """
-    def quality_update(self, note: int, quality: str, value: float, relative=False, channel=None):
+    def set_note_quality(self, note: int, quality: str, value: float, relative=False, channel=None):
         """
-        Update a note's quality to a new value.
+        Set a note's quality to a new value.
 
         Example
             quality_update(48, 'brightness', 0.5)
@@ -255,7 +259,7 @@ class MRP(object):
                 tmp = self.notes[self.note_index(note)]
                 if isinstance(value, list) or isinstance(value, np.ndarray): # e.g. /harmonics/raw
                     if relative is True:
-                        self.print('quality_update(): relative updating of lists not supported')
+                        self.print('set_note_quality(): relative updating of lists not supported')
                         # if (len(tmp['qualities'][quality]) > 0):
                         #     for i, q in enumerate(tmp['qualities'][quality]):
                         #         tmp['qualities'][quality][i] += self.quality_clamp(value[i])
@@ -280,13 +284,37 @@ class MRP(object):
                     self.osc.send(path, channel, note, tmp['qualities'][quality], client="mrp")
                     return tmp
             else:
-                self.print('quality_update(): invalid message:', quality, note, value)
+                self.print('set_note_quality(): invalid message:', quality, note, value)
                 return None
         else:
-            self.print('quality_update(): "quality" is not a string:', quality)
+            self.print('set_note_quality(): "quality" is not a string:', quality)
             return None
 
-    def qualities_update(self, note, qualities, relative=False, channel=None):
+    def set_quality(self, quality, value, relative=False, channel=None):
+        """
+        Update quality of all active notes to a new value.
+
+        Example
+            set_quality('brightness', 0.5)
+        
+        Args
+            quality (string): name of quality to update, must be same as key in osc_paths
+            value (float): value of quality
+            relative (bool): replace the value or add it to the current value
+            channel (int): which MIDI channel to send on
+        """
+        if isinstance(quality, str):
+            active_notes = self.note_on_numbers()
+            changed_notes = []
+            for note in active_notes:
+                changed_note = self.set_note_quality(self, note, quality, value, relative, channel)
+                changed_notes.append(changed_note)
+            return changed_notes
+        else:
+            print('quality_update(): "quality" is not a string:', quality)
+            return None
+
+    def set_note_qualities(self, note, qualities, relative=False, channel=None):
         """
         Update a note's qualities to a new set of values.
 
@@ -332,6 +360,34 @@ class MRP(object):
                 return None
         else:
             self.print('quality_update(): "qualities" is not an object:', note, qualities)
+            return None
+
+    def set_qualities(self, qualities, relative=False, channel=None):
+        """
+        Update the qualities for all active notes to a new set of values.
+        
+        Example
+            set_qualities({
+                'brightness': 0.5,
+                'intensity': 0.6,
+                'harmonics_raw': [0.2, 0.3, 0.4]
+            })
+        
+        Args
+            qualities (dict): dict of qualities in key (string):value (float) pairs to update, 
+                              must be same as key in osc_paths
+            relative (bool): replace the value or add it to the current value
+            channel (int): which MIDI channel to send on
+        """
+        if isinstance(qualities, dict):
+            active_notes = self.note_on_numbers()
+            changed_notes = []
+            for note in active_notes:
+                changed_note = self.qualities_update(self, qualities, relative, channel)
+                changed_notes.append(changed_note)
+            return changed_notes
+        else:
+            print('quality_update(): "qualities" is not an object:', note, qualities)
             return None
 
     """
