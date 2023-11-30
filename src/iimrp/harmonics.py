@@ -8,110 +8,132 @@ TODO: nearest harmonics: for a given frequency and a set of notes, find nearest 
 import numpy as np
 np.set_printoptions(suppress=True)
 
-def create_harmonics(N):
-    # The frequency of A0 in Hz
-    A0_frequency = 27.5
+def create_harmonics(H:int, N:int=88, A0_freq:float=27.5) -> np.array:
+    """Create a 2D array of harmonics for a piano with N keys.
 
+    Args:
+        H (int): Number of harmonics to create.
+        N (int): Number of piano notes (default=88).
+        A0_freq (float): Frequency of note A0 (default=27.5).
+
+    Returns:
+        np.array: 2D array of harmonics.
+    """
     # The ratio between the frequencies of two adjacent notes in a chromatic scale
     chromatic_ratio = 2 ** (1 / 12)
-
-    # Create an array of note indices
-    note_indices = np.arange(88)
-
-    # Calculate the frequencies of the notes
-    note_frequencies = A0_frequency * (chromatic_ratio ** note_indices)
-
-    # Create an array of harmonic indices
-    harmonic_indices = np.arange(1, N + 1)
-
-    # Calculate the frequencies of the harmonics
-    harmonics = note_frequencies[:, np.newaxis] * harmonic_indices
-
+    note_indices = np.arange(N) # Create an array of note indices
+    note_frequencies = A0_freq * (chromatic_ratio ** note_indices) # Calculate the frequencies of the notes
+    harmonic_indices = np.arange(1, H + 1) # Create an array of harmonic indices
+    harmonics = note_frequencies[:, np.newaxis] * harmonic_indices # Calculate the frequencies of the harmonics
     return harmonics
 
 MAX_HARMONICS = 8
 piano_harmonics = create_harmonics(MAX_HARMONICS)
 
-def find_harmonic(frequency):
-    # Create the 2D array of harmonics
-    harmonics = piano_harmonics
+def find_harmonic(frequency:float, A0_note:int=21) -> np.array:
+    """Find the nearest harmonic for a given frequency.
 
+    Args:
+        frequency (float): Frequency to find the nearest harmonic for.
+        A0_note (int, optional): MIDI note number for A0. Defaults to 21.
+
+    Returns:
+        np.array: Array containing the MIDI note number, harmonic index, and frequency of the nearest harmonic.
+    """
+    harmonics = piano_harmonics # Get the global 2D array of harmonics
     # Calculate the absolute differences between the harmonics and the input frequency
     differences = np.abs(harmonics - frequency)
-
     # Find the index of the minimum difference
     note_index, harmonic_index = np.unravel_index(np.argmin(differences), differences.shape)
-
     # Convert the note index to a MIDI note number and the harmonic index to a 1-based index
-    midi_note_number = note_index + 21  # MIDI note number for A0 is 21
-
-    # Get the nearest harmonic
-    nearest_harmonic = harmonics[note_index, harmonic_index]
-
+    midi_note_number = note_index + A0_note # MIDI note number for A0 is 21
+    nearest_harmonic = harmonics[note_index, harmonic_index] # Get the nearest harmonic
     return np.array([midi_note_number, harmonic_index + 1, nearest_harmonic])
 
-def find_nearest_harmonics(frequency, H, sort="frequency"):
-    # Create the 2D array of harmonics
-    harmonics = piano_harmonics
+def find_nearest_harmonics(frequency:float, H:int, sort:str="frequency") -> np.array:
+    """Find the H nearest harmonics for a given frequency.
 
+    Args:
+        frequency (float): Frequency to find the nearest harmonics for.
+        H (int): Number of harmonics to find.
+        sort (str, optional): Sort the results by "note", "harmonic", or "frequency". Defaults to "frequency".
+
+    Returns:
+        np.array: Array containing the MIDI note number, harmonic index, and frequency of the nearest harmonics.
+    """
+    harmonics = piano_harmonics # Get the global 2D array of harmonics
     # Calculate the absolute differences between the harmonics and the input frequency
     differences = np.abs(harmonics - frequency)
-
     # Get the indices of the H smallest differences
     indices = np.argpartition(differences, H, axis=None)[:H]
-
     # Convert the indices to 2D indices
     note_indices, harmonic_indices = np.unravel_index(indices, differences.shape)
-
     # Convert the note indices to MIDI note numbers
     midi_note_numbers = note_indices + 21  # MIDI note number for A0 is 21
-
     # Create a 2D array of the results
     results = np.column_stack((midi_note_numbers, harmonic_indices + 1, harmonics[note_indices, harmonic_indices]))
-
     # Sort the results
     sort_index = {"note": 0, "harmonic": 1, "frequency": 2}.get(sort, 2)
     results = results[results[:, sort_index].argsort()]
-
     return results
 
-def create_single_harmonic_gain_array(harmonic_index, gain=1.0, N=MAX_HARMONICS):
-    # Create an array of zeros with length N
-    harmonics = np.zeros(N)
-    
-    # Set the value at the harmonic index to the gain
-    harmonics[harmonic_index - 1] = gain  # Subtract 1 because numpy arrays are 0-indexed
+def create_single_harmonic_gain_array(index:int, gain:float=1.0, N:int=MAX_HARMONICS) -> np.array:
+    """Create an array of harmonic gains with a single non-zero value.
 
+    Args:
+        index (int): Index of the harmonic to set.
+        gain (float, optional): Gain of the harmonic. Defaults to 1.0.
+        N (int, optional): Length of the array. Defaults to MAX_HARMONICS.
+
+    Returns:
+        np.array: Array of harmonic gains.
+    """
+    harmonics = np.zeros(N) # Create an array of zeros with length N
+    # Set the value at the harmonic index to the gain
+    harmonics[index - 1] = gain  # Subtract 1 because numpy arrays are 0-indexed
     return harmonics
 
-def get_harmonic_gain_arrays(nearest_harmonics, gain=1.0, N=MAX_HARMONICS):
-    # Initialize an empty list to store the arrays
-    harmonic_gain_arrays = []
+def get_harmonic_gain_arrays(nearest_harmonics:np.ndarray, gain:float=1.0, N:int=MAX_HARMONICS) -> np.array:
+    """Get an array of harmonic gain arrays for a given array of nearest harmonics.
 
+    Args:
+        nearest_harmonics (np.ndarray): Array of nearest harmonics.
+        gain (float, optional): Gain of the harmonics. Defaults to 1.0.
+        N (int, optional): Length of the harmonic gain arrays. Defaults to MAX_HARMONICS.
+
+    Returns:
+        np.array: Array of harmonic gain arrays.
+    """
+    harmonic_gain_arrays = [] # Initialize an empty list to store the arrays
     # For each row in the nearest harmonics array
     for row in nearest_harmonics:
-        # Get the harmonic index
-        harmonic_index = int(row[1])
-
+        harmonic_index = int(row[1]) # Get the harmonic index
         # Create the harmonic gain array
         harmonic_gain_array = create_single_harmonic_gain_array(harmonic_index, gain, N)
-
         # Add the array to the list
         harmonic_gain_arrays.append(harmonic_gain_array)
-
     return np.array(harmonic_gain_arrays)
 
-def freq_to_harmonics_and_gains(frequency, H, N=MAX_HARMONICS, gain=1.0, sort="frequency"):
+def freq_to_harmonics_and_gains(frequency:float, H:int, N:int=MAX_HARMONICS, gain:float=1.0, sort:str="frequency") -> tuple[np.ndarray, np.ndarray]:
+    """Convert a frequency to an array of nearest harmonics and an array of harmonic gain arrays.
+
+    Args:
+        frequency (float): Frequency to convert.
+        H (int): Number of harmonics to find.
+        N (int, optional): Length of the harmonic gain arrays. Defaults to MAX_HARMONICS.
+        gain (float, optional): Gain of the harmonics. Defaults to 1.0.
+        sort (str, optional): Sort the results by "note", "harmonic", or "frequency". Defaults to "frequency".
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Array of nearest harmonics and array of harmonic gain arrays.
+    """
     # Find the nearest harmonics
     nearest_harmonics = find_nearest_harmonics(frequency, H, sort)
-
     # Get the harmonic gain arrays
     harmonic_gain_arrays = get_harmonic_gain_arrays(nearest_harmonics, gain, N)
-
     return (nearest_harmonics, harmonic_gain_arrays)
 
-# Harmonic series for various instruments
-# Note: These are simplified and generalized representations
+# Harmonic series for various instruments (untested)
 instrument_harmonics = {
     'violin':[1, 0.8, 0.6, 0.5, 0.4, 0.35, 0.3, 0.25, 0.2, 0.18, 0.16, 0.14, 0.12, 0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01],
     'flute': [1, 0.1, 0.05, 0.025, 0.0125, 0.00625, 0.003125, 0.0015625, 0.00078125, 0.000390625, 0.0001953125, 0.00009765625, 0.000048828125, 0.0000244140625, 0.00001220703125, 0.000006103515625, 0.0000030517578125, 0.00000152587890625, 0.000000762939453125, 0.0000003814697265625, 0.00000019073486328125, 0.000000095367431640625, 0.0000000476837158203125, 0.00000002384185791015625, 0.000000011920928955078125, 0.0000000059604644775390625, 0.00000000298023223876953125, 0.000000001490116119384765625, 0.0000000007450580596923828125, 0.00000000037252902984619140625, 0.000000000186264514923095703125, 0.0000000000931322574615478515625],
