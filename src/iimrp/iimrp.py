@@ -31,7 +31,7 @@ def clamp(n, smallest, largest):
     return max(smallest, min(n, largest))
 
 class MRP(object):
-    def __init__(self, osc, settings=None, verbose=True):
+    def __init__(self, osc, settings=None, verbose=False):
         # default settings
         self.verbose = verbose
         self.settings = {
@@ -579,7 +579,6 @@ class MRP(object):
             return False
 
     def note_msg_is_valid(self, note):
-        print(f"note_msg_is_valid(): note {note}")
         return self.note_off_is_valid(note)
 
     """
