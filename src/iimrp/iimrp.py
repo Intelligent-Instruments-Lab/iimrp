@@ -243,7 +243,7 @@ class MRP(object):
         Set a note's quality to a new value.
 
         Example
-            quality_update(48, 'brightness', 0.5)
+            set_note_quality(48, 'brightness', 0.5)
 
         Args
             note (int): MIDI note number
@@ -319,7 +319,7 @@ class MRP(object):
         Update a note's qualities to a new set of values.
 
         Example
-            qualities_update(48, {
+            set_note_qualities(48, {
                 'brightness': 0.5,
                 'intensity': 0.6,
                 'harmonics_raw': [0.2, 0.3, 0.4]
