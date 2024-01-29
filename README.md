@@ -12,6 +12,10 @@
 - MRP OSCTarget definition in Haskell
 - `mrp.tidal` showing usage examples
 
+## Max MSP
+
+- `mrp.osc` object & helpfile
+
 ## Python
 
 The `mrp` Python package lives in our iil-python-tools repo: http://github.com/Intelligent-Instruments-Lab/iil-python-tools. Follow the instructions there to install it, then read/try the examples in this repo.
