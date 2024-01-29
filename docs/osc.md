@@ -58,7 +58,7 @@ Important: all paths are prefixed with `/mrp`, everything else is ignored
 /midi: byte a, byte b, byte c // standard 3-byte MIDI messages e.g. 144 90 60
 ```
 
-## MIDI Over OSC Emulation
+### MIDI Over OSC Emulation
 
 - `./mrp/source/main.cpp`
     - L493: `MidiController* mainMidiController = new MidiController(mainRender);`
