@@ -6,7 +6,11 @@ repo_name: iil/iimrp
 
 plugins:
   - search  
-  - mkdocstrings
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
   - include-markdown
   - autorefs
   - gen-files:
