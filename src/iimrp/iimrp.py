@@ -22,6 +22,8 @@ TODO:
 import numpy as np
 import copy
 
+from .thermal import *
+
 NOTE_ON = True
 NOTE_OFF = False
 
@@ -29,12 +31,7 @@ def clamp(n, smallest, largest):
     return max(smallest, min(n, largest))
 
 class MRP(object):
-
-    def print(self, *a, **kw):
-        if self.verbose:
-            print(*a, **kw)
-    
-    def __init__(self, _osc, settings=None, verbose=True):
+    def __init__(self, osc, settings=None, verbose=False):
         # default settings
         self.verbose = verbose
         self.settings = {
@@ -49,7 +46,8 @@ class MRP(object):
             'channel': 15, # real-time midi note ch (0-indexed)
             'range': { 'start': 21, 'end': 108 }, # MIDI for piano keys 0-88
             'qualities_max': 1.0,
-            'qualities_min': 0.0
+            'qualities_min': 0.0,
+            'heat_monitor': False
         }
         self.note_on_hex = 0x9F
         self.note_off_hex = 0x8F
@@ -60,8 +58,10 @@ class MRP(object):
         self.print('MRP starting with settings:', self.settings)
 
         # OSC reference and paths
-        self.osc = _osc
-        assert self.osc.get_client_by_name("mrp") is not None, f"OSC client 'mrp' not found in: {_osc.client_names}"
+        self.osc = osc
+        if self.osc.get_client_by_name("mrp") is None:
+            self.print(f"MRP OSC client not found, creating one at {self.settings['address']['ip']}:{self.settings['address']['port']}")
+            self.osc.create_client("mrp", self.settings['address']['ip'], self.settings['address']['port'])
         self.osc_paths = {
             'midi': '/mrp/midi',
             'qualities': {
@@ -117,6 +117,12 @@ class MRP(object):
         self.program = 0 # current program (see MRP XML)
         # init sequence
         self.init_notes()
+        if self.settings['heat_monitor'] is True:
+            self.heat_monitor = MRPHeatMonitor(self)
+
+    def monitor(self):
+        if self.settings['heat_monitor'] is True:
+            self.heat_monitor()
 
     def init_notes(self):
         """
@@ -133,7 +139,7 @@ class MRP(object):
             )
             self.notes.append(note)
         self.print(len(self.notes), 'notes created.')
- 
+
     """
     /mrp/midi
     """
@@ -232,12 +238,12 @@ class MRP(object):
     """
     /mrp/qualities
     """
-    def quality_update(self, note: int, quality: str, value: float, relative=False, channel=None):
+    def set_note_quality(self, note: int, quality: str, value: float, relative=False, channel=None):
         """
-        Update a note's quality to a new value.
+        Set a note's quality to a new value.
 
         Example
-            quality_update(48, 'brightness', 0.5)
+            set_note_quality(48, 'brightness', 0.5)
 
         Args
             note (int): MIDI note number
@@ -253,7 +259,7 @@ class MRP(object):
                 tmp = self.notes[self.note_index(note)]
                 if isinstance(value, list) or isinstance(value, np.ndarray): # e.g. /harmonics/raw
                     if relative is True:
-                        self.print('quality_update(): relative updating of lists not supported')
+                        self.print('set_note_quality(): relative updating of lists not supported')
                         # if (len(tmp['qualities'][quality]) > 0):
                         #     for i, q in enumerate(tmp['qualities'][quality]):
                         #         tmp['qualities'][quality][i] += self.quality_clamp(value[i])
@@ -278,18 +284,42 @@ class MRP(object):
                     self.osc.send(path, channel, note, tmp['qualities'][quality], client="mrp")
                     return tmp
             else:
-                self.print('quality_update(): invalid message:', quality, note, value)
+                self.print('set_note_quality(): invalid message:', quality, note, value)
                 return None
         else:
-            self.print('quality_update(): "quality" is not a string:', quality)
+            self.print('set_note_quality(): "quality" is not a string:', quality)
             return None
 
-    def qualities_update(self, note, qualities, relative=False, channel=None):
+    def set_quality(self, quality, value, relative=False, channel=None):
+        """
+        Update quality of all active notes to a new value.
+
+        Example
+            set_quality('brightness', 0.5)
+        
+        Args
+            quality (string): name of quality to update, must be same as key in osc_paths
+            value (float): value of quality
+            relative (bool): replace the value or add it to the current value
+            channel (int): which MIDI channel to send on
+        """
+        if isinstance(quality, str):
+            active_notes = self.note_on_numbers()
+            changed_notes = []
+            for note in active_notes:
+                changed_note = self.set_note_quality(self, note, quality, value, relative, channel)
+                changed_notes.append(changed_note)
+            return changed_notes
+        else:
+            print('quality_update(): "quality" is not a string:', quality)
+            return None
+
+    def set_note_qualities(self, note, qualities, relative=False, channel=None):
         """
         Update a note's qualities to a new set of values.
 
         Example
-            qualities_update(48, {
+            set_note_qualities(48, {
                 'brightness': 0.5,
                 'intensity': 0.6,
                 'harmonics_raw': [0.2, 0.3, 0.4]
@@ -331,6 +361,94 @@ class MRP(object):
         else:
             self.print('quality_update(): "qualities" is not an object:', note, qualities)
             return None
+
+    def set_qualities(self, qualities, relative=False, channel=None):
+        """
+        Update the qualities for all active notes to a new set of values.
+        
+        Example
+            set_qualities({
+                'brightness': 0.5,
+                'intensity': 0.6,
+                'harmonics_raw': [0.2, 0.3, 0.4]
+            })
+        
+        Args
+            qualities (dict): dict of qualities in key (string):value (float) pairs to update, 
+                              must be same as key in osc_paths
+            relative (bool): replace the value or add it to the current value
+            channel (int): which MIDI channel to send on
+        """
+        if isinstance(qualities, dict):
+            active_notes = self.note_on_numbers()
+            changed_notes = []
+            for note in active_notes:
+                changed_note = self.qualities_update(self, qualities, relative, channel)
+                changed_notes.append(changed_note)
+            return changed_notes
+        else:
+            print('quality_update(): "qualities" is not an object:', note, qualities)
+            return None
+
+    def get_note_quality(self, note:int, quality:str) -> float:
+        """
+        Return the value of a note's quality.
+
+        Example
+            get_note_quality(48, 'brightness')
+        
+        Args
+            note (int): MIDI note number
+            quality (string): name of quality to get, must be same as key in osc_paths
+
+        Returns
+            float: value of quality
+        """
+        return self.notes[self.note_index(note)]['qualities'][quality]
+
+    def get_note_qualities(self, note:int) -> dict:
+        """
+        Return the values of a note's qualities.
+
+        Example
+            get_note_qualities(48)
+        
+        Args
+            note (int): MIDI note number
+
+        Returns
+            dict: dict of qualities in key (string):value (float) pairs
+        """
+        return self.notes[self.note_index(note)]['qualities']
+    
+    def get_quality(self, quality:str) -> dict:
+        """
+        Return values of a quality for all active notes.
+
+        Example
+            get_quality('brightness')
+        
+        Args
+            quality (string): name of quality to get, must be same as key in osc_paths
+
+        Returns
+            dict: note:quality in key (int):value (float) pairs
+        """
+        active_notes = self.note_on_numbers()
+        return {n:self.get_note_quality(n, quality) for n in active_notes}
+    
+    def get_qualities(self) -> dict:
+        """
+        Return values of all qualities for all active notes.
+
+        Example
+            get_qualities()
+        
+        Returns
+            dict: note:qualities in key (int):value (dict) pairs
+        """
+        active_notes = self.note_on_numbers()
+        return {n:self.get_note_qualities(n) for n in active_notes}
 
     """
     /mrp/pedal
@@ -444,11 +562,7 @@ class MRP(object):
                 return False
         else:
             self.print('note_on_is_valid(): note', note, 'out of range')
-            return False
-            
-
-    def note_msg_is_valid(self, note):
-        return self.note_off_is_valid(note)
+            return False    
 
     def note_off_is_valid(self, note):
         """
@@ -463,6 +577,9 @@ class MRP(object):
         else:
             self.print('note_off_is_valid(): note', note, 'is already off')
             return False
+
+    def note_msg_is_valid(self, note):
+        return self.note_off_is_valid(note)
 
     """
     qualities methods
@@ -553,3 +670,7 @@ class MRP(object):
     def cleanup(self):
         print('MRP exiting...')
         self.all_notes_off()
+
+    def print(self, *a, **kw):
+        """verbose debug printing"""
+        if self.verbose: print(*a, **kw)
