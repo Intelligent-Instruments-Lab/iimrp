@@ -19,8 +19,11 @@ TODO:
 - rename harmonic -> harmonic_sweep and add harmonic(note, partial, amplitude)
 """
 
+import time
+import math
 import numpy as np
 import copy
+from datetime import datetime
 
 from .thermal import *
 
@@ -30,11 +33,10 @@ NOTE_OFF = False
 def clamp(n, smallest, largest):
     return max(smallest, min(n, largest))
 
-class MRP(object):
-    def __init__(self, osc, settings=None, verbose=False):
-        # default settings
-        self.verbose = verbose
-        self.settings = {
+class MRP:
+    def __init__(self, osc, **kwargs):
+        self.verbose = kwargs.get('verbose', False)
+        self.default_settings = {
             'address': {
                 'port': 7770,
                 'ip': '127.0.0.1'
@@ -44,17 +46,14 @@ class MRP(object):
                 'rule': 'oldest' # oldest, lowest, highest, quietest...
             },
             'channel': 15, # real-time midi note ch (0-indexed)
-            'range': { 'start': 21, 'end': 108 }, # MIDI for piano keys 0-88
+            'range': { 'start': 21, 'end': 128 }, # MIDI for piano keys 0-88
             'qualities_max': 1.0,
             'qualities_min': 0.0,
             'heat_monitor': False
         }
+        self.settings = kwargs.get('settings', self.default_settings)
         self.note_on_hex = 0x9F
         self.note_off_hex = 0x8F
-        # custom settings
-        if settings is not None:
-            for k, v in settings.items():
-                self.settings[k] = v
         self.print('MRP starting with settings:', self.settings)
 
         # OSC reference and paths
@@ -119,6 +118,22 @@ class MRP(object):
         self.init_notes()
         if self.settings['heat_monitor'] is True:
             self.heat_monitor = MRPHeatMonitor(self)
+        self.note_names = {
+            "a0": 21, "as0": 22, "b0": 23,
+            "c1": 24, "cs1": 25, "d1": 26, "ds1": 27, "e1": 28, "f1": 29, "fs1": 30, "g1": 31, "gs1": 32, "a1": 33, "as1": 34, "b1": 35,
+            "c2": 36, "cs2": 37, "d2": 38, "ds2": 39, "e2": 40, "f2": 41, "fs2": 42, "g2": 43, "gs2": 44, "a2": 45, "as2": 46, "b2": 47,
+            "c3": 48, "cs3": 49, "d3": 50, "ds3": 51, "e3": 52, "f3": 53, "fs3": 54, "g3": 55, "gs3": 56, "a3": 57, "as3": 58, "b3": 59,
+            "c4": 60, "cs4": 61, "d4": 62, "ds4": 63, "e4": 64, "f4": 65, "fs4": 66, "g4": 67, "gs4": 68, "a4": 69, "as4": 70, "b4": 71,
+            "c5": 72, "cs5": 73, "d5": 74, "ds5": 75, "e5": 76, "f5": 77, "fs5": 78, "g5": 79, "gs5": 80, "a5": 81, "as5": 82, "b5": 83,
+            "c6": 84, "cs6": 85, "d6": 86, "ds6": 87, "e6": 88, "f6": 89, "fs6": 90, "g6": 91, "gs6": 92, "a6": 93, "as6": 94, "b6": 95,
+            "c7": 96, "cs7": 97, "d7": 98, "ds7": 99, "e7": 100, "f7": 101, "fs7": 102, "g7": 103, "gs7": 104, "a7": 105, "as7": 106, "b7": 107,
+            "c8": 108, "cs8": 109, "d8": 110, "ds8": 111, "e8": 112, "f8": 113, "fs8": 114, "g8": 115, "gs8": 116, "a8": 117, "as8": 118, "b8": 119,
+            "c9": 120, "cs9": 121, "d9": 122, "e9": 123, "f9": 124, "fs9": 125, "g9": 126, "gs9": 127, "a9": 128
+        }
+
+        if kwargs.get('record', False):
+            self.recording_filename = kwargs.get('file', None)
+            self.record_start()
 
     def monitor(self):
         if self.settings['heat_monitor'] is True:
@@ -159,7 +174,7 @@ class MRP(object):
             tmp['midi']['velocity'] = velocity
             path = self.osc_paths['midi']
             self.print(path, 'Note On:', note, ', Velocity:', velocity)
-            self.osc.send(path, self.note_on_hex, note, velocity, client="mrp")
+            self.send(path, self.note_on_hex, note, velocity, client="mrp")
             return tmp
         else:
             self.print('note_on(): invalid Note On', note)
@@ -182,7 +197,7 @@ class MRP(object):
             tmp['midi']['velocity'] = velocity
             path = self.osc_paths['midi']
             self.print(path, 'Note Off:', note)
-            self.osc.send(path, self.note_off_hex, note, velocity, client="mrp")
+            self.send(path, self.note_off_hex, note, velocity, client="mrp")
             return tmp
         else:
             self.print('note_off(): invalid Note Off', note)
@@ -215,7 +230,7 @@ class MRP(object):
     #     )
     #     path = self.osc_paths['midi']
     #     self.print(path, 'Control Change:', *m.bytes())
-    #     self.osc.send(path, *m.bytes(), client="mrp")
+    #     self.send(path, *m.bytes(), client="mrp")
 
     # def program_change(self, program, channel=None):
     #     """
@@ -233,7 +248,7 @@ class MRP(object):
     #     )
     #     path = self.osc_paths['midi']
     #     self.print(path, 'Program Change:', *m.bytes())
-    #     self.osc.send(path, *m.bytes(), client="mrp")
+    #     self.send(path, *m.bytes(), client="mrp")
     
     """
     /mrp/qualities
@@ -272,7 +287,7 @@ class MRP(object):
                         tmp['qualities'][quality] = [self.quality_clamp(v) for v in value]
                     path = self.osc_paths['qualities'][quality]
                     self.print(path, channel, note, *tmp['qualities'][quality])
-                    self.osc.send(path, channel, note, *tmp['qualities'][quality], client="mrp")
+                    self.send(path, channel, note, *tmp['qualities'][quality], client="mrp")
                     return tmp
                 else:
                     if relative is True:
@@ -281,7 +296,7 @@ class MRP(object):
                         tmp['qualities'][quality] = self.quality_clamp(value)
                     path = self.osc_paths['qualities'][quality]
                     self.print(path, channel, note, tmp['qualities'][quality])
-                    self.osc.send(path, channel, note, tmp['qualities'][quality], client="mrp")
+                    self.send(path, channel, note, tmp['qualities'][quality], client="mrp")
                     return tmp
             else:
                 self.print('set_note_quality(): invalid message:', quality, note, value)
@@ -345,7 +360,7 @@ class MRP(object):
                             tmp['qualities'][q] = [self.quality_clamp(i) for i in v]
                         path = self.osc_paths['qualities'][q]
                         self.print(path, channel, note, *tmp['qualities'][q])
-                        self.osc.send(path, channel, note, *tmp['qualities'][q], client="mrp")
+                        self.send(path, channel, note, *tmp['qualities'][q], client="mrp")
                     else:
                         if relative is True:
                             tmp['qualities'][q] = self.quality_clamp(v, tmp['qualities'][q])
@@ -353,7 +368,7 @@ class MRP(object):
                             tmp['qualities'][q] = self.quality_clamp(v)
                         path = self.osc_paths['qualities'][q]
                         self.print(path, channel, note, tmp['qualities'][q])
-                        self.osc.send(path, channel, note, tmp['qualities'][q], client="mrp")
+                        self.send(path, channel, note, tmp['qualities'][q], client="mrp")
                 return tmp
             else:
                 self.print('quality_update(): invalid message:', note, qualities)
@@ -460,7 +475,7 @@ class MRP(object):
         self.pedal.sostenuto = sostenuto
         path = self.osc_paths['pedal']['sostenuto']
         self.print(path, sostenuto)
-        self.osc.send(path, sostenuto, client="mrp")
+        self.send(path, sostenuto, client="mrp")
 
     def pedal_damper(self, damper):
         """
@@ -469,7 +484,7 @@ class MRP(object):
         self.pedal.damper = damper
         path = self.osc_paths['pedal']['damper']
         self.print(path, damper)
-        self.osc.send(path, damper, client="mrp")
+        self.send(path, damper, client="mrp")
 
     """
     /mrp/* miscellaneous
@@ -480,7 +495,7 @@ class MRP(object):
         """
         path = self.osc_paths['misc']['allnotesoff']
         self.print(path)
-        self.osc.send(path, client="mrp")
+        self.send(path, client="mrp")
         self.init_notes()
         self.voices_reset()
 
@@ -494,7 +509,7 @@ class MRP(object):
         self.ui.volume = value
         path = self.osc_paths['ui']['volume']
         self.print(path, value)
-        self.osc.send(path, value, client="mrp")
+        self.send(path, value, client="mrp")
 
     def ui_volume_raw(self, value):
         """
@@ -503,7 +518,7 @@ class MRP(object):
         self.ui.volume_raw = value
         path = self.osc_paths['ui']['volume_raw']
         self.print(path, value)
-        self.osc.send(path, value, client="mrp")
+        self.send(path, value, client="mrp")
 
     """
     note methods
@@ -665,6 +680,42 @@ class MRP(object):
         return {n['midi']['number']:n['qualities']['harmonics_raw'] for n in self.notes}
 
     """
+    logging
+    """
+
+    def send(self, *args, **kwargs):
+        """
+        wrapped osc.send to handle logging
+        """
+        self.osc.send(*args, **kwargs)
+        if self.osc.log.recording:
+            self.log(*args)
+
+    def log(self, *args):
+        """
+        Examples:
+            0.00336 /mrp/allnotesoff
+            0.50414 /mrp/midi iii 159 48 1
+            1.30600 /mrp/quality/harmonics/raw iifff 15 48 0.03 0.0 0.0
+            2.81722 /mrp/quality/intensity iif 15 70 0 
+            3.00336 /mrp/allnotesoff
+        """
+        tag = self.osc.log.type_tag(args[1:])
+        args = [self.t(), args[0], tag] + list(args[1:])
+        self.osc.log(self.osc_args_to_log_str(args))
+
+    def osc_args_to_log_str(self, arr: list) -> str:
+        return ' '.join([f'{x:.5f}' if isinstance(x, float) else str(x) for x in arr])
+
+    def record_start(self):
+        if self.recording_filename is None:
+            self.recording_filename = f"iimrp-recording_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+        self.start_time = time.time()
+        self.t = lambda: time.time() - self.start_time
+        self.osc.log.record_start(self.recording_filename)
+        print(f"[iimrp] Recording started")
+
+    """
     misc methods
     """
     def cleanup(self):
@@ -674,3 +725,53 @@ class MRP(object):
     def print(self, *a, **kw):
         """verbose debug printing"""
         if self.verbose: print(*a, **kw)
+
+    def midi_to_freq(self, midi_note):
+        """
+        Convert a MIDI note number to its frequency in Hertz.
+        """
+        return 440.0 * (2.0 ** ((midi_note - 69) / 12.0))
+
+    def freq_to_midi(self, freq):
+        """
+        Convert a frequency in Hertz to the closest MIDI note number.
+        """
+        return 69 + 12 * math.log2(freq / 440.0)
+
+    def note_name_to_midi(self, note_name):
+        """
+        Convert a musical note name (e.g., C4, A#3, etc.) to its MIDI note number.
+        """
+        return self.note_names[note_name]
+
+    def midi_to_note_name(self, midi_note):
+        """
+        Convert a MIDI note number to its musical note name.
+        """
+        for note, value in self.note_names.items():
+            if value == midi_note:
+                return note
+
+    def midi_notes_to_freqs(self, midi_notes):
+        """
+        Convert a list of MIDI note numbers to their frequencies in Hertz.
+        """
+        return [self.midi_to_freq(n) for n in midi_notes]
+    
+    def freqs_to_midi_notes(self, freqs):
+        """
+        Convert a list of frequencies in Hertz to the closest MIDI note numbers.
+        """
+        return [self.freq_to_midi(f) for f in freqs]
+    
+    def note_names_to_midi_notes(self, note_names):
+        """
+        Convert a list of musical note names to their MIDI note numbers.
+        """
+        return [self.note_name_to_midi(n) for n in note_names]
+    
+    def midi_notes_to_note_names(self, midi_notes):
+        """
+        Convert a list of MIDI note numbers to their musical note names.
+        """
+        return [self.midi_to_note_name(n) for n in midi_notes]
