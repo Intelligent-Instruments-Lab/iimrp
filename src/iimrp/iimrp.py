@@ -135,6 +135,8 @@ class MRP:
             self.recording_filename = kwargs.get('file', None)
             self.record_start()
 
+        self.setup_amp_data(kwargs)
+
     def monitor(self):
         if self.settings['heat_monitor'] is True:
             self.heat_monitor()
@@ -775,3 +777,54 @@ class MRP:
         Convert a list of MIDI note numbers to their musical note names.
         """
         return [self.midi_to_note_name(n) for n in midi_notes]
+
+    """
+    helpers for testing mrp amplifier boards
+    """
+
+    def flatten(self, l):
+        return [item for sublist in l for item in sublist]
+
+    def setup_amp_data(self, kwargs):
+        self.amps = kwargs.get('amps', 3)
+        self.notes_per_amp = 18
+        self.amp_rows = self.amps * 2
+        self.amp_notes = [{
+            self.midi_to_note_name(j):j for j in
+            range(21+i*self.notes_per_amp, 
+                  21+i*self.notes_per_amp+self.notes_per_amp)
+        } for i in range(self.amp_rows)]
+    
+    def get_amps(self, amps:int|list, style:str='notes'):
+        if isinstance(amps, int):
+            if style == 'names':
+                return self.get_amp_names(amps)
+            elif style == 'notes':
+                return self.get_amp_notes(amps)
+        if style == 'names':
+            return self.flatten([self.get_amp_names(a) for a in amps])
+        elif style == 'notes':
+            return self.flatten([self.get_amp_notes(a) for a in amps])
+
+    def get_amp(self, amp):
+        return self.amp_notes[amp]
+    
+    def get_amp_notes(self, amp):
+        return list(self.amp_notes[amp].values())
+    
+    def get_amp_names(self, amp):
+        return list(self.amp_notes[amp].keys())
+    
+    def get_amp_fstlst(self, amp, style:str='notes') -> list:
+        if style == 'names':
+            return [next(iter(self.amp_notes[amp].keys())), 
+                next(reversed(self.amp_notes[amp].keys()))]
+        elif style == 'notes':
+            return [next(iter(self.amp_notes[amp].values())), 
+                next(reversed(self.amp_notes[amp].values()))]
+    
+    def get_amps_fstlst(self, amps: int|list) -> list:
+        if isinstance(amps, int):
+            return self.get_amp_fstlst(amps)
+        amps = [self.get_amp_fstlst(a) for a in amps]
+        return self.flatten(amps)
