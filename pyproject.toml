@@ -9,7 +9,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
 numpy = "^1.26.2"
-iipyper = {path = "../iipyper", develop = true}
+iipyper = "^0.1.0b1"
 
 [tool.poetry.group.dev.dependencies]
 mkdocs = "^1.5.3"
