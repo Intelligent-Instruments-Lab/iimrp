@@ -131,6 +131,7 @@ class MRP:
             "c9": 120, "cs9": 121, "d9": 122, "e9": 123, "f9": 124, "fs9": 125, "g9": 126, "gs9": 127, "a9": 128
         }
 
+        self.recording = False
         if kwargs.get('record', False):
             self.recording_filename = kwargs.get('file', None)
             self.record_start()
@@ -176,8 +177,7 @@ class MRP:
             tmp['midi']['velocity'] = velocity
             path = self.osc_paths['midi']
             self.print(path, 'Note On:', note, ', Velocity:', velocity)
-            self.send(path, self.note_on_hex, note, velocity, client="mrp")
-            return tmp
+            return self.send(path, self.note_on_hex, note, velocity, client="mrp")
         else:
             self.print('note_on(): invalid Note On', note)
             return None
@@ -199,8 +199,7 @@ class MRP:
             tmp['midi']['velocity'] = velocity
             path = self.osc_paths['midi']
             self.print(path, 'Note Off:', note)
-            self.send(path, self.note_off_hex, note, velocity, client="mrp")
-            return tmp
+            return self.send(path, self.note_off_hex, note, velocity, client="mrp")
         else:
             self.print('note_off(): invalid Note Off', note)
             return None
@@ -289,8 +288,7 @@ class MRP:
                         tmp['qualities'][quality] = [self.quality_clamp(v) for v in value]
                     path = self.osc_paths['qualities'][quality]
                     self.print(path, channel, note, *tmp['qualities'][quality])
-                    self.send(path, channel, note, *tmp['qualities'][quality], client="mrp")
-                    return tmp
+                    return self.send(path, channel, note, *tmp['qualities'][quality], client="mrp")
                 else:
                     if relative is True:
                         tmp['qualities'][quality] = self.quality_clamp(value + tmp['qualities'][quality])
@@ -298,8 +296,7 @@ class MRP:
                         tmp['qualities'][quality] = self.quality_clamp(value)
                     path = self.osc_paths['qualities'][quality]
                     self.print(path, channel, note, tmp['qualities'][quality])
-                    self.send(path, channel, note, tmp['qualities'][quality], client="mrp")
-                    return tmp
+                    return self.send(path, channel, note, tmp['qualities'][quality], client="mrp")
             else:
                 self.print('set_note_quality(): invalid message:', quality, note, value)
                 return None
@@ -362,7 +359,7 @@ class MRP:
                             tmp['qualities'][q] = [self.quality_clamp(i) for i in v]
                         path = self.osc_paths['qualities'][q]
                         self.print(path, channel, note, *tmp['qualities'][q])
-                        self.send(path, channel, note, *tmp['qualities'][q], client="mrp")
+                        return self.send(path, channel, note, *tmp['qualities'][q], client="mrp")
                     else:
                         if relative is True:
                             tmp['qualities'][q] = self.quality_clamp(v, tmp['qualities'][q])
@@ -370,8 +367,7 @@ class MRP:
                             tmp['qualities'][q] = self.quality_clamp(v)
                         path = self.osc_paths['qualities'][q]
                         self.print(path, channel, note, tmp['qualities'][q])
-                        self.send(path, channel, note, tmp['qualities'][q], client="mrp")
-                return tmp
+                        return self.send(path, channel, note, tmp['qualities'][q], client="mrp")
             else:
                 self.print('quality_update(): invalid message:', note, qualities)
                 return None
@@ -477,7 +473,7 @@ class MRP:
         self.pedal.sostenuto = sostenuto
         path = self.osc_paths['pedal']['sostenuto']
         self.print(path, sostenuto)
-        self.send(path, sostenuto, client="mrp")
+        return self.send(path, sostenuto, client="mrp")
 
     def pedal_damper(self, damper):
         """
@@ -486,7 +482,7 @@ class MRP:
         self.pedal.damper = damper
         path = self.osc_paths['pedal']['damper']
         self.print(path, damper)
-        self.send(path, damper, client="mrp")
+        return self.send(path, damper, client="mrp")
 
     """
     /mrp/* miscellaneous
@@ -497,9 +493,9 @@ class MRP:
         """
         path = self.osc_paths['misc']['allnotesoff']
         self.print(path)
-        self.send(path, client="mrp")
         self.init_notes()
         self.voices_reset()
+        return self.send(path, client="mrp")
 
     """
     /mrp/ui
@@ -511,7 +507,7 @@ class MRP:
         self.ui.volume = value
         path = self.osc_paths['ui']['volume']
         self.print(path, value)
-        self.send(path, value, client="mrp")
+        return self.send(path, value, client="mrp")
 
     def ui_volume_raw(self, value):
         """
@@ -520,7 +516,7 @@ class MRP:
         self.ui.volume_raw = value
         path = self.osc_paths['ui']['volume_raw']
         self.print(path, value)
-        self.send(path, value, client="mrp")
+        return self.send(path, value, client="mrp")
 
     """
     note methods
@@ -771,13 +767,13 @@ class MRP:
         """
         return [self.freq_to_midi(f) for f in freqs]
     
-    def note_names_to_midi_notes(self, note_names):
+    def note_names_to_midi(self, note_names):
         """
         Convert a list of musical note names to their MIDI note numbers.
         """
         return [self.note_name_to_midi(n) for n in note_names]
     
-    def midi_notes_to_note_names(self, midi_notes):
+    def midi_numbers_to_names(self, midi_notes):
         """
         Convert a list of MIDI note numbers to their musical note names.
         """
