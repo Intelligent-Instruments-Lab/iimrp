@@ -690,8 +690,9 @@ class MRP:
         wrapped osc.send to handle logging
         """
         self.osc.send(*args, **kwargs)
-        if self.osc.log.recording:
+        if self.recording:
             self.log(*args)
+        return args
 
     def log(self, *args):
         """
@@ -703,17 +704,21 @@ class MRP:
             3.00336 /mrp/allnotesoff
         """
         tag = self.osc.log.type_tag(args[1:])
-        args = [self.t(), args[0], tag] + list(args[1:])
-        self.osc.log(self.osc_args_to_log_str(args))
+        args = self.osc_args_to_log_str([self.t(), args[0], tag] + list(args[1:]))
+        self.osc.log(args)
+        return args
 
     def osc_args_to_log_str(self, arr: list) -> str:
         return ' '.join([f'{x:.5f}' if isinstance(x, float) else str(x) for x in arr])
 
-    def record_start(self):
-        if self.recording_filename is None:
+    def record_start(self, filename: str=None):
+        if filename is not None:
+            self.recording_filename = filename
+        elif self.recording_filename is None:
             self.recording_filename = f"iimrp-recording_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
-        self.start_time = time.time()
-        self.t = lambda: time.time() - self.start_time
+        self.record_start_time = time.time()
+        self.t = lambda: time.time() - self.record_start_time
+        self.recording = True
         self.osc.log.record_start(self.recording_filename)
         print(f"[iimrp] Recording started")
 
